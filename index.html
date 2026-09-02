@@ -651,7 +651,7 @@ let currentAdminUser = null;
 let diaristaFiltroAtual = 'todas';
 let unsubDiaristas = null;
 let unsubSolicitacoes = null;
-let cacheDiaristas = [];
+let cacheDiaristas = []; let cacheSolicitacoes = [];
 
 async function adminLogin(ev){
     ev.preventDefault();
@@ -702,14 +702,14 @@ function setDiaristaFiltro(status){
 
 function startAdminListeners(){
   unsubDiaristas = db.collection('diaristas').orderBy('createdAt','desc').onSnapshot(snap=>{
-    cacheDiaristas = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    cacheDiaristas = snap.docs.map(d=>({id:d.id, ...d.data()})); renderSolicitacoes(cacheSolicitacoes);
     renderDiaristas();
 }, err=>{
     document.getElementById('lista-diaristas').innerHTML = '<div class="empty-state">Erro ao carregar diaristas.</div>';
 });
 
   unsubSolicitacoes = db.collection('solicitacoes').where('verified','==',true).orderBy('createdAt','desc').onSnapshot(snap=>{
-    const lista = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    const lista = snap.docs.map(d=>({id:d.id, ...d.data()})); cacheSolicitacoes = lista;
     renderSolicitacoes(lista);
 }, err=>{
     document.getElementById('lista-solicitacoes').innerHTML = '<div class="empty-state">Erro ao carregar solicitações.</div>';
