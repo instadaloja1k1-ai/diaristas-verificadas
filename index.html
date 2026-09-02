@@ -398,7 +398,7 @@
     };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
-const db = firebase.firestore();
+const db = firebase.firestore(); const verifyApp = firebase.initializeApp(firebaseConfig, 'verificacaoEmail'); const verifyAuth = verifyApp.auth(); const verifyDb = verifyApp.firestore();
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 function fillUFs(){
@@ -595,7 +595,7 @@ async function submitSolicitacao(ev){
       url: window.location.origin + window.location.pathname + '?sid=' + docRef.id,
       handleCodeInApp: true
 };
-    await auth.sendSignInLinkToEmail(email, actionCodeSettings);
+    await verifyAuth.sendSignInLinkToEmail(email, actionCodeSettings);
     window.localStorage.setItem('dv_email_verificacao', email);
 
     document.getElementById('form-solicitar').reset();
@@ -613,7 +613,7 @@ async function submitSolicitacao(ev){
 }
 
 async function handleEmailLinkVerification(){
-  if(!auth.isSignInWithEmailLink(window.location.href)) return false;
+  if(!verifyAuth.isSignInWithEmailLink(window.location.href)) return false;
 
   navigate('verificando');
   const conteudo = document.getElementById('verificando-conteudo');
@@ -630,8 +630,8 @@ async function handleEmailLinkVerification(){
 }
 
   try{
-    await auth.signInWithEmailLink(email, window.location.href);
-    await db.collection('solicitacoes').doc(sid).update({
+    await verifyAuth.signInWithEmailLink(email, window.location.href);
+    await verifyDb.collection('solicitacoes').doc(sid).update({
       verified: true,
       status: 'verificada'
 });
@@ -639,7 +639,7 @@ async function handleEmailLinkVerification(){
     conteudo.innerHTML = '<div class="lock-icon">✅</div><h2>E-mail confirmado!</h2><p class="card-lead">Sua solicitação foi verificada e já está com nossa equipe. Em breve entraremos em contato pelo telefone ou e-mail informado.</p>';
     // limpa a URL e encerra a sessão temporária usada só para verificação
     window.history.replaceState({}, document.title, window.location.pathname);
-    await auth.signOut();
+    await verifyAuth.signOut();
 }catch(e){
     conteudo.innerHTML = '<div class="lock-icon">⚠️</div><h2>Não foi possível confirmar</h2><p class="card-lead">O link pode ter expirado ou já ter sido usado. Se precisar, envie a solicitação novamente.</p>';
 }
