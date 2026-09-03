@@ -344,6 +344,15 @@
               </div>
             </div>
 
+            <div class="field">
+              <label>Forma de pagamento</label>
+              <select id="s-forma-pagamento" required>
+                <option value="">Selecione</option>
+                <option value="pix">Pix</option>
+                <option value="cartao">Cartão de crédito</option>
+              </select>
+            </div>
+
             <div class="geo-box" id="s-valor-box" style="display:none;">
               <div class="geo-status ok" id="s-valor-estimado" style="font-size:1.15rem;font-weight:700;"></div>
             </div>
@@ -366,6 +375,57 @@
             <h2>Verificando seu e-mail...</h2>
             <p class="card-lead">Aguarde um instante.</p>
       </div>
+    </div>
+  </section>
+
+  <!-- AVALIAR DIARISTA (link enviado pela equipe após o atendimento) -->
+  <section id="view-avaliar-diarista" class="view">
+    <div class="card">
+      <h2>Avaliação da faxina</h2>
+      <p class="card-lead">Confirme se as informações da solicitação bateram com o que você encontrou no imóvel.</p>
+
+      <div id="avaliar-alert"></div>
+
+      <div class="geo-box">
+        <b>Informado na solicitação</b>
+        <div class="detail-grid" style="margin-top:8px;">
+          <div><b>Cômodos</b><span id="av-comodos-informado">-</span></div>
+          <div><b>Nível de sujeira</b><span id="av-sujeira-informado">-</span></div>
+        </div>
+      </div>
+
+      <form id="form-avaliar-diarista" onsubmit="return submitAvaliacaoDiarista(event)">
+        <div class="field">
+          <label>A quantidade de cômodos informada estava correta?</label>
+          <select id="av-comodos-correto" required>
+            <option value="">Selecione</option>
+            <option value="sim">Sim, estava correta</option>
+            <option value="nao">Não, era diferente</option>
+          </select>
+        </div>
+        <div class="field" id="av-comodos-real-wrap" style="display:none;">
+          <label>Quantos cômodos tinha, na verdade?</label>
+          <input type="number" id="av-comodos-real" min="1" step="1">
+        </div>
+        <div class="field">
+          <label>O nível de sujeira informado estava correto?</label>
+          <select id="av-sujeira-correto" required>
+            <option value="">Selecione</option>
+            <option value="sim">Sim, estava correto</option>
+            <option value="nao">Não, era diferente</option>
+          </select>
+        </div>
+        <div class="field" id="av-sujeira-real-wrap" style="display:none;">
+          <label>Qual era o nível de sujeira, na verdade?</label>
+          <select id="av-sujeira-real">
+            <option value="">Selecione</option>
+            <option value="1">Nível 1 - Leve</option>
+            <option value="2">Nível 2 - Médio</option>
+            <option value="3">Nível 3 - Alto</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="av-submit-btn">Enviar avaliação</button>
+      </form>
     </div>
   </section>
 
@@ -538,23 +598,35 @@ dvSetupFotoInput('d');
 function dvCalcularValorSolicitacao(){
 const comodosEl = document.getElementById('s-comodos');
 const sujeiraEl = document.getElementById('s-sujeira');
+const formaEl = document.getElementById('s-forma-pagamento');
 const box = document.getElementById('s-valor-box');
 const out = document.getElementById('s-valor-estimado');
-if(!comodosEl || !sujeiraEl || !box || !out) return null;
+if(!comodosEl || !sujeiraEl || !formaEl || !box || !out) return null;
 const comodos = parseInt(comodosEl.value, 10);
 const sujeira = parseInt(sujeiraEl.value, 10);
-if(!comodos || comodos < 1 || !sujeira){
+const forma = formaEl.value;
+if(!comodos || comodos < 1 || !sujeira || !forma){
 box.style.display = 'none';
 return null;
 }
 const valorSujeira = {1:20, 2:25, 3:35}[sujeira] || 0;
-const valor = (comodos * 48) + valorSujeira;
-out.textContent = 'Valor estimado da diária: R$ ' + valor.toFixed(2).replace('.', ',');
+const valorBase = (comodos * 48) + valorSujeira;
+const taxaExtra = 1.99;
+const taxaGateway = forma === 'cartao' ? (0.49 + (valorBase * 0.0299)) : 1.99;
+const valorFinal = valorBase + taxaGateway + taxaExtra;
+out.textContent = 'Valor estimado da diária: R$ ' + valorFinal.toFixed(2).replace('.', ',');
 box.style.display = 'block';
-return valor;
+return {
+valorBase: Math.round(valorBase * 100) / 100,
+taxaGateway: Math.round(taxaGateway * 100) / 100,
+taxaExtra: taxaExtra,
+valorFinal: Math.round(valorFinal * 100) / 100,
+formaPagamento: forma
+};
 }
 if(document.getElementById('s-comodos')) document.getElementById('s-comodos').addEventListener('input', dvCalcularValorSolicitacao);
 if(document.getElementById('s-sujeira')) document.getElementById('s-sujeira').addEventListener('change', dvCalcularValorSolicitacao);
+if(document.getElementById('s-forma-pagamento')) document.getElementById('s-forma-pagamento').addEventListener('change', dvCalcularValorSolicitacao);
 
 async function useGeolocation(prefix){
   const statusEl = document.getElementById(prefix+'-geo-status');
@@ -682,6 +754,7 @@ async function submitSolicitacao(ev){
 }
 
   const email = document.getElementById('s-email').value.trim();
+  const dvCalculoAtual = dvCalcularValorSolicitacao();
   const dados = {
     nome: document.getElementById('s-nome').value.trim(),
     telefone: document.getElementById('s-telefone').value.trim(),
@@ -699,7 +772,10 @@ async function submitSolicitacao(ev){
     observacoes: document.getElementById('s-obs').value.trim(),
     comodos: parseInt(document.getElementById('s-comodos').value, 10),
     nivelSujeira: parseInt(document.getElementById('s-sujeira').value, 10),
-    valorEstimado: dvCalcularValorSolicitacao(),
+    formaPagamento: dvCalculoAtual ? dvCalculoAtual.formaPagamento : null,
+    valorEstimado: dvCalculoAtual ? dvCalculoAtual.valorBase : null,
+    taxaGateway: dvCalculoAtual ? dvCalculoAtual.taxaGateway : null,
+    valorFinal: dvCalculoAtual ? dvCalculoAtual.valorFinal : null,
     status: 'aguardando_verificacao',
     verified: false,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -764,6 +840,82 @@ async function handleEmailLinkVerification(){
     conteudo.innerHTML = '<div class="lock-icon">⚠️</div><h2>Não foi possível confirmar</h2><p class="card-lead">O link pode ter expirado ou já ter sido usado. Se precisar, envie a solicitação novamente.</p>';
 }
   return true;
+}
+
+// ---------- Avaliação da diarista (link enviado pela equipe) ----------
+function handleAvaliacaoDiaristaLink(){
+  const params = new URLSearchParams(window.location.search);
+  if(params.get('avaliar') !== 'diarista') return false;
+  const sid = params.get('sid');
+  if(!sid) return false;
+  window.__avSid = sid;
+  navigate('avaliar-diarista');
+  const comodos = params.get('comodos');
+  const sujeira = params.get('sujeira');
+  const sujeiraLabels = {'1':'Nível 1 - Leve', '2':'Nível 2 - Médio', '3':'Nível 3 - Alto'};
+  document.getElementById('av-comodos-informado').textContent = comodos || '-';
+  document.getElementById('av-sujeira-informado').textContent = sujeiraLabels[sujeira] || '-';
+  return true;
+}
+
+function dvSetupAvaliacaoToggles(){
+  const cSel = document.getElementById('av-comodos-correto');
+  const sSel = document.getElementById('av-sujeira-correto');
+  if(cSel) cSel.addEventListener('change', ()=>{
+    document.getElementById('av-comodos-real-wrap').style.display = cSel.value==='nao' ? 'block' : 'none';
+});
+  if(sSel) sSel.addEventListener('change', ()=>{
+    document.getElementById('av-sujeira-real-wrap').style.display = sSel.value==='nao' ? 'block' : 'none';
+});
+}
+dvSetupAvaliacaoToggles();
+
+async function submitAvaliacaoDiarista(ev){
+  ev.preventDefault();
+  const alertBox = document.getElementById('avaliar-alert');
+  const btn = document.getElementById('av-submit-btn');
+  alertBox.innerHTML = '';
+
+  const comodosCorretoVal = document.getElementById('av-comodos-correto').value;
+  const sujeiraCorretoVal = document.getElementById('av-sujeira-correto').value;
+  if(!comodosCorretoVal || !sujeiraCorretoVal){
+    alertBox.innerHTML = '<div class="alert alert-error">Responda as duas perguntas antes de enviar.</div>';
+    return false;
+}
+
+  const comodosRealEl = document.getElementById('av-comodos-real');
+  const sujeiraRealEl = document.getElementById('av-sujeira-real');
+  const payload = {
+    solicitacaoId: window.__avSid,
+    comodosCorreto: comodosCorretoVal === 'sim',
+    comodosReal: (comodosCorretoVal === 'nao' && comodosRealEl.value) ? parseInt(comodosRealEl.value, 10) : null,
+    sujeiraCorreto: sujeiraCorretoVal === 'sim',
+    sujeiraReal: (sujeiraCorretoVal === 'nao' && sujeiraRealEl.value) ? parseInt(sujeiraRealEl.value, 10) : null
+};
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Enviando...';
+  try{
+    const resp = await fetch(ASAAS_BACKEND_URL + '/api/registrar-avaliacao-diarista', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+});
+    const result = await resp.json();
+    if(!resp.ok){
+      alertBox.innerHTML = '<div class="alert alert-error">' + (result.error || 'Erro ao enviar avaliação.') + '</div>';
+      btn.disabled = false;
+      btn.textContent = 'Enviar avaliação';
+      return false;
+}
+    document.getElementById('form-avaliar-diarista').style.display = 'none';
+    alertBox.innerHTML = '<div class="alert alert-success">Avaliação enviada! Obrigado.</div>';
+}catch(e){
+    alertBox.innerHTML = '<div class="alert alert-error">Erro de conexão. Tente novamente.</div>';
+    btn.disabled = false;
+    btn.textContent = 'Enviar avaliação';
+}
+  return false;
 }
 
 // ---------- Admin ----------
@@ -984,17 +1136,63 @@ function renderSolicitacoes(lista){
           <div><b>Cidade/UF</b>${escapeHtml(end.cidade||'-')} / ${escapeHtml(end.uf||'-')}</div>
           <div><b>Cômodos</b>${s.comodos||'-'}</div>
           <div><b>Nível de sujeira</b>${s.nivelSujeira||'-'}</div>
-          <div><b>Valor estimado</b>${s.valorEstimado ? 'R$ '+s.valorEstimado.toFixed(2).replace('.', ',') : '-'}</div>
+          <div><b>Forma de pagamento</b>${s.formaPagamento==='cartao'?'Cartão de crédito':(s.formaPagamento==='pix'?'Pix':'-')}</div>
+          <div><b>Valor da diária</b>${s.valorEstimado ? 'R$ '+s.valorEstimado.toFixed(2).replace('.', ',') : '-'}</div>
+          <div><b>Taxa de pagamento</b>${s.taxaGateway ? 'R$ '+s.taxaGateway.toFixed(2).replace('.', ',') : '-'}</div>
+          <div><b>Valor final (cliente)</b>${s.valorFinal ? 'R$ '+s.valorFinal.toFixed(2).replace('.', ',') : '-'}</div>
         </div>
         ${s.observacoes ? `<p style="font-size:.88rem;"><b>Observações:</b> ${escapeHtml(s.observacoes)}</p>` : ''}
         <p style="font-weight:700;font-size:.85rem;margin-bottom:6px;">Diaristas aprovadas mais próximas:</p>
         ${matchesHtml}
+        <div class="field" style="margin-top:10px;">
+          <label>Diarista responsável pelo atendimento</label>
+          <select id="sel-diarista-${s.id}">
+            <option value="">Selecione</option>
+            ${aprovadas.map(d=>`<option value="${d.id}" ${s.diaristaId===d.id?'selected':''}>${escapeHtml(d.nome)}</option>`).join('')}
+          </select>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="atribuirDiarista('${s.id}')">Confirmar diarista responsável</button>
+          ${s.diaristaNome ? `<div style="margin-top:6px;font-size:.82rem;color:var(--muted);">Responsável atual: <b>${escapeHtml(s.diaristaNome)}</b></div>` : ''}
+        </div>
+        ${s.avaliacaoDiarista ? `
+        <div class="geo-box" style="margin-top:10px;">
+          <b>Avaliação da diarista</b>
+          <div class="detail-grid" style="margin-top:8px;">
+            <div><b>Cômodos</b>${fmtAvaliacaoItem(s.avaliacaoDiarista.comodosCorreto, s.avaliacaoDiarista.comodosReal)}</div>
+            <div><b>Nível de sujeira</b>${fmtAvaliacaoItem(s.avaliacaoDiarista.sujeiraCorreto, s.avaliacaoDiarista.sujeiraReal)}</div>
+          </div>
+        </div>` : ''}
         <div class="action-row">
           ${s.status !== 'atendida' ? `<button class="btn btn-success btn-sm" onclick="marcarAtendida('${s.id}')">Marcar como atendida</button>` : ''}
+          ${s.status === 'atendida' && s.diaristaId ? `<button class="btn btn-outline btn-sm" onclick="copiarLinkAvaliacao('${s.id}', ${s.comodos||0}, ${s.nivelSujeira||0})">🔗 Copiar link de avaliação para a diarista</button>` : ''}
         </div>
       </div>
     </div>`;
 }).join('');
+}
+
+function fmtAvaliacaoItem(correto, real){
+  if(correto) return '✅ Correto';
+  return '⚠️ Incorreto' + (real ? ' (informou real: ' + real + ')' : '');
+}
+
+async function atribuirDiarista(solicitacaoId){
+  const sel = document.getElementById('sel-diarista-'+solicitacaoId);
+  const diaristaId = sel ? sel.value : '';
+  if(!diaristaId){ alert('Selecione uma diarista antes de confirmar.'); return; }
+  const d = cacheDiaristas.find(x=>x.id===diaristaId);
+  await db.collection('solicitacoes').doc(solicitacaoId).update({
+    diaristaId,
+    diaristaNome: d ? d.nome : ''
+});
+}
+
+function copiarLinkAvaliacao(solicitacaoId, comodos, sujeira){
+  const url = `${window.location.origin}${window.location.pathname}?avaliar=diarista&sid=${solicitacaoId}&comodos=${comodos}&sujeira=${sujeira}`;
+  navigator.clipboard.writeText(url).then(()=>{
+    alert('Link copiado! Envie para a diarista pelo WhatsApp.');
+}).catch(()=>{
+    prompt('Copie manualmente:', url);
+});
 }
 
 async function marcarAtendida(id){
@@ -1008,6 +1206,7 @@ function escapeHtml(str){
 
 // ---------- Boot ----------
 (async function boot(){
+  if(handleAvaliacaoDiaristaLink()) return;
   const handled = await handleEmailLinkVerification();
   if(!handled){
     const hash = (window.location.hash || '#home').replace('#','');
