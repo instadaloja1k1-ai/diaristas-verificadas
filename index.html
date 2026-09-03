@@ -201,6 +201,16 @@
             <input type="tel" id="d-telefone" placeholder="(00) 00000-0000" required>
               </div>
             </div>
+        <div class="row2">
+<div class="field">
+<label>E-mail</label>
+<input type="email" id="d-email" required>
+</div>
+<div class="field">
+<label>Renda mensal aproximada <span class="hint">(exigido pelo Banco Central para o cadastro de pagamento)</span></label>
+<input type="text" id="d-renda" inputmode="decimal" placeholder="Ex: 1500,00" required>
+</div>
+</div>
 
             <div class="field">
               <div class="autocomplete-wrap" id="d-busca-wrap"><label>Buscar endereço <span class="hint">(digite e selecione da lista)</span></label><input type="text" id="d-busca" autocomplete="off" placeholder="Ex: Avenida Paulista, 1000, São Paulo"><div class="autocomplete-list" id="d-busca-lista"></div></div><label>Endereço - Rua e número</label>
@@ -268,6 +278,10 @@
                 <input type="email" id="s-email" required>
               </div>
             </div>
+        <div class="field">
+<label>CPF</label>
+<input type="text" id="s-cpf" placeholder="000.000.000-00" required>
+</div>
 
             <div class="field">
               <div class="autocomplete-wrap" id="s-busca-wrap"><label>Buscar endereço <span class="hint">(digite e selecione da lista)</span></label><input type="text" id="s-busca" autocomplete="off" placeholder="Ex: Avenida Paulista, 1000, São Paulo"><div class="autocomplete-list" id="s-busca-lista"></div></div><label>Endereço - Rua e número</label>
@@ -399,6 +413,7 @@
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore(); const verifyApp = firebase.initializeApp(firebaseConfig, 'verificacaoEmail'); const verifyAuth = verifyApp.auth(); const verifyDb = verifyApp.firestore();
+      const ASAAS_BACKEND_URL = 'https://diaristas-backend.vercel.app';
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 function fillUFs(){
@@ -523,6 +538,8 @@ async function submitDiarista(ev){
     rg: document.getElementById('d-rg').value.trim(),
     dataNascimento: document.getElementById('d-nasc').value,
     telefone: document.getElementById('d-telefone').value.trim(),
+    email: document.getElementById('d-email').value.trim(),
+incomeValue: parseFloat(document.getElementById('d-renda').value.replace(/\./g,'').replace(',', '.')) || 0,
     endereco: {
       rua: document.getElementById('d-rua').value.trim(),
       bairro: document.getElementById('d-bairro').value.trim(),
@@ -571,6 +588,7 @@ async function submitSolicitacao(ev){
     nome: document.getElementById('s-nome').value.trim(),
     telefone: document.getElementById('s-telefone').value.trim(),
     email: email,
+    cpf: document.getElementById('s-cpf').value.trim(),
     endereco: {
       rua: document.getElementById('s-rua').value.trim(),
       bairro: document.getElementById('s-bairro').value.trim(),
@@ -775,9 +793,33 @@ function toggleItem(id){
 }
 
 async function atualizarStatusDiarista(id, status){
-  await db.collection('diaristas').doc(id).update({status});
+if(status === 'aprovada'){
+const d = cacheDiaristas.find(x=>x.id===id);
+if(d && !d.asaasWalletId){
+try{
+const resp = await fetch(ASAAS_BACKEND_URL + '/api/criar-subconta', {
+method: 'POST',
+headers: {'Content-Type': 'application/json'},
+body: JSON.stringify({
+diaristaId: id,
+email: d.email,
+incomeValue: d.incomeValue,
+birthDate: d.dataNascimento
+})
+});
+const result = await resp.json();
+if(!resp.ok){
+alert('Não foi possível criar a carteira de pagamento desta diarista: ' + (result.error || 'erro desconhecido') + '. O status não foi alterado — verifique e-mail, renda e data de nascimento no cadastro dela e tente aprovar novamente.');
+return;
 }
-
+}catch(e){
+alert('Erro de conexão ao tentar criar a carteira de pagamento. O status não foi alterado. Tente novamente.');
+return;
+}
+}
+}
+await db.collection('diaristas').doc(id).update({status});
+}
 function copiarParaAdvogado(id){
   const d = cacheDiaristas.find(x=>x.id===id);
   if(!d) return;
@@ -833,6 +875,7 @@ function renderSolicitacoes(lista){
         <div class="detail-grid">
           <div><b>Telefone</b>${escapeHtml(s.telefone||'-')}</div>
           <div><b>E-mail</b>${escapeHtml(s.email||'-')}</div>
+          <div><b>CPF</b>${escapeHtml(s.cpf||'-')}</div>
           <div><b>Endereço</b>${escapeHtml(end.rua||'-')}, ${escapeHtml(end.bairro||'')}</div>
           <div><b>Cidade/UF</b>${escapeHtml(end.cidade||'-')} / ${escapeHtml(end.uf||'-')}</div>
         </div>
