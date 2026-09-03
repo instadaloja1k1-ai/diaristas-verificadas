@@ -328,6 +328,28 @@
               </select>
             </div>
 
+            <div class="row2">
+              <div class="field">
+                <label>Quantos cômodos tem o imóvel?</label>
+                <input type="number" id="s-comodos" min="1" step="1" placeholder="Ex: 3" required>
+              </div>
+              <div class="field">
+                <label>Nível de sujeira</label>
+                <select id="s-sujeira" required>
+                  <option value="">Selecione</option>
+                  <option value="1">Nível 1 - Leve</option>
+                  <option value="2">Nível 2 - Médio</option>
+                  <option value="3">Nível 3 - Alto</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="geo-box" id="s-valor-box" style="display:none;">
+              <b>💰 Valor estimado da diária</b>
+              <p style="margin:6px 0 0;font-size:.85rem;color:var(--muted);">Calculado automaticamente pelo tamanho do imóvel e nível de sujeira (R$45 por cômodo + R$15 por nível de sujeira).</p>
+              <div class="geo-status ok" id="s-valor-estimado" style="font-size:1.15rem;font-weight:700;"></div>
+            </div>
+
             <div class="field">
               <label>Observações <span class="hint">(frequência desejada, tipo de serviço, etc.)</span></label>
           <textarea id="s-obs" rows="3"></textarea>
@@ -515,6 +537,26 @@ alert('Nao foi possivel processar essa foto. Tente outra imagem.');
 }
 dvSetupFotoInput('d');
 
+function dvCalcularValorSolicitacao(){
+const comodosEl = document.getElementById('s-comodos');
+const sujeiraEl = document.getElementById('s-sujeira');
+const box = document.getElementById('s-valor-box');
+const out = document.getElementById('s-valor-estimado');
+if(!comodosEl || !sujeiraEl || !box || !out) return null;
+const comodos = parseInt(comodosEl.value, 10);
+const sujeira = parseInt(sujeiraEl.value, 10);
+if(!comodos || comodos < 1 || !sujeira){
+box.style.display = 'none';
+return null;
+}
+const valor = (comodos * 45) + (sujeira * 15);
+out.textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
+box.style.display = 'block';
+return valor;
+}
+if(document.getElementById('s-comodos')) document.getElementById('s-comodos').addEventListener('input', dvCalcularValorSolicitacao);
+if(document.getElementById('s-sujeira')) document.getElementById('s-sujeira').addEventListener('change', dvCalcularValorSolicitacao);
+
 async function useGeolocation(prefix){
   const statusEl = document.getElementById(prefix+'-geo-status');
   statusEl.className = 'geo-status';
@@ -656,6 +698,9 @@ async function submitSolicitacao(ev){
     lng: geoData.s.lng,
     raioKm: parseInt(document.getElementById('s-raio').value, 10),
     observacoes: document.getElementById('s-obs').value.trim(),
+    comodos: parseInt(document.getElementById('s-comodos').value, 10),
+    nivelSujeira: parseInt(document.getElementById('s-sujeira').value, 10),
+    valorEstimado: dvCalcularValorSolicitacao(),
     status: 'aguardando_verificacao',
     verified: false,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -674,6 +719,7 @@ async function submitSolicitacao(ev){
     window.localStorage.setItem('dv_email_verificacao', email);
 
     document.getElementById('form-solicitar').reset();
+    document.getElementById('s-valor-box').style.display = 'none';
     geoData.s = null;
     document.getElementById('s-geo-status').textContent = 'Localização ainda não definida.';
     document.getElementById('s-geo-status').className = 'geo-status';
@@ -937,6 +983,9 @@ function renderSolicitacoes(lista){
           <div><b>CPF</b>${escapeHtml(s.cpf||'-')}</div>
           <div><b>Endereço</b>${escapeHtml(end.rua||'-')}, ${escapeHtml(end.bairro||'')}</div>
           <div><b>Cidade/UF</b>${escapeHtml(end.cidade||'-')} / ${escapeHtml(end.uf||'-')}</div>
+          <div><b>Cômodos</b>${s.comodos||'-'}</div>
+          <div><b>Nível de sujeira</b>${s.nivelSujeira||'-'}</div>
+          <div><b>Valor estimado</b>${s.valorEstimado ? 'R$ '+s.valorEstimado.toFixed(2).replace('.', ',') : '-'}</div>
         </div>
         ${s.observacoes ? `<p style="font-size:.88rem;"><b>Observações:</b> ${escapeHtml(s.observacoes)}</p>` : ''}
         <p style="font-weight:700;font-size:.85rem;margin-bottom:6px;">Diaristas aprovadas mais próximas:</p>
