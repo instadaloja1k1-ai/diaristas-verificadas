@@ -181,6 +181,11 @@
               <label>Nome completo</label>
               <input type="text" id="d-nome" required>
             </div>
+            <div class="field">
+              <label>Foto do rosto <span class="hint">(usada para identificação no processo de avaliação)</span></label>
+              <input type="file" id="d-foto" accept="image/*" capture="environment" required>
+              <img id="d-foto-preview" style="display:none;margin-top:10px;max-width:160px;border-radius:8px;border:1px solid var(--border);">
+            </div>
             <div class="row2">
               <div class="field">
                 <label>CPF</label>
@@ -466,6 +471,50 @@ async function geocodeAddress(query){
 
 const geoData = { d:null, s:null };
 
+const fotoData = { d:null };
+
+function dvComprimirFoto(file){
+return new Promise((resolve, reject)=>{
+const reader = new FileReader();
+reader.onload = (e)=>{
+const img = new Image();
+img.onload = ()=>{
+const maxDim = 500;
+let w = img.width, h = img.height;
+if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+else if(h >= w && h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+const canvas = document.createElement('canvas');
+canvas.width = w; canvas.height = h;
+canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+resolve(canvas.toDataURL('image/jpeg', 0.6));
+};
+img.onerror = ()=>reject(new Error('Nao foi possivel ler a imagem.'));
+img.src = e.target.result;
+};
+reader.onerror = ()=>reject(new Error('Nao foi possivel ler o arquivo.'));
+reader.readAsDataURL(file);
+});
+}
+
+function dvSetupFotoInput(prefix){
+const input = document.getElementById(prefix+'-foto');
+if(!input) return;
+input.addEventListener('change', async ()=>{
+const file = input.files[0];
+const preview = document.getElementById(prefix+'-foto-preview');
+if(!file){ fotoData[prefix] = null; if(preview) preview.style.display='none'; return; }
+try{
+fotoData[prefix] = await dvComprimirFoto(file);
+if(preview){ preview.src = fotoData[prefix]; preview.style.display = 'block'; }
+}catch(e){
+fotoData[prefix] = null;
+if(preview) preview.style.display='none';
+alert('Nao foi possivel processar essa foto. Tente outra imagem.');
+}
+});
+}
+dvSetupFotoInput('d');
+
 async function useGeolocation(prefix){
   const statusEl = document.getElementById(prefix+'-geo-status');
   statusEl.className = 'geo-status';
@@ -532,7 +581,13 @@ async function submitDiarista(ev){
     return false;
 }
 
-  const dados = {
+  if(!fotoData.d){
+alertBox.innerHTML = '<div class="alert alert-error">Envie uma foto do rosto antes de enviar o cadastro.</div>';
+return false;
+}
+const dados = {
+foto: fotoData.d,
+
     nome: document.getElementById('d-nome').value.trim(),
     cpf: document.getElementById('d-cpf').value.trim(),
     rg: document.getElementById('d-rg').value.trim(),
@@ -561,6 +616,8 @@ incomeValue: parseFloat(document.getElementById('d-renda').value.replace(/\./g,'
     geoData.d = null;
     document.getElementById('d-geo-status').textContent = 'Localização ainda não definida.';
     document.getElementById('d-geo-status').className = 'geo-status';
+fotoData.d = null;
+document.getElementById('d-foto-preview').style.display = 'none';
     alertBox.innerHTML = '<div class="alert alert-success">Cadastro enviado! Vamos analisar seus dados e a verificação de antecedentes. Entraremos em contato pelo telefone informado assim que o resultado sair.</div>';
     window.scrollTo(0,0);
 }catch(e){
@@ -759,6 +816,7 @@ function renderDiaristas(){
     return `
     <div class="list-item">
       <div class="list-item-head" onclick="toggleItem('diarista-${d.id}')">
+${d.foto ? `<img src="${d.foto}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;margin-right:8px;vertical-align:middle;">` : ''}
         <div>
           <span class="name">${escapeHtml(d.nome||'(sem nome)')}</span>
           <div class="meta">${escapeHtml(end.cidade||'')} ${end.uf?'- '+end.uf:''}</div>
@@ -766,6 +824,7 @@ function renderDiaristas(){
         ${badgeDiarista(d.status)}
       </div>
       <div class="list-item-body" id="diarista-${d.id}">
+${d.foto ? `<img src="${d.foto}" style="max-width:180px;border-radius:8px;margin-bottom:14px;display:block;">` : ''}
         <div class="detail-grid">
           <div><b>CPF</b>${escapeHtml(d.cpf||'-')}</div>
           <div><b>RG</b>${escapeHtml(d.rg||'-')}</div>
