@@ -923,7 +923,7 @@ let currentAdminUser = null;
 let diaristaFiltroAtual = 'todas';
 let unsubDiaristas = null;
 let unsubSolicitacoes = null;
-let cacheDiaristas = []; let cacheSolicitacoes = [];
+let cacheDiaristas = []; let cacheSolicitacoes = []; let dvCobrancasCache = {};
 
 async function adminLogin(ev){
     ev.preventDefault();
@@ -1148,6 +1148,7 @@ function renderSolicitacoes(lista){
           <div><b>Valor da diária</b>${s.valorEstimado ? 'R$ '+s.valorEstimado.toFixed(2).replace('.', ',') : '-'}</div>
           <div><b>Taxa de pagamento</b>${s.taxaGateway ? 'R$ '+s.taxaGateway.toFixed(2).replace('.', ',') : '-'}</div>
           <div><b>Valor final (cliente)</b>${s.valorFinal ? 'R$ '+s.valorFinal.toFixed(2).replace('.', ',') : '-'}</div>
+          <div><b>Status do pagamento</b>${s.asaasPaymentId ? dvFormatAsaasStatus(s.asaasStatus) : '-'}</div>
         </div>
         ${s.observacoes ? `<p style="font-size:.88rem;"><b>Observações:</b> ${escapeHtml(s.observacoes)}</p>` : ''}
         <p style="font-weight:700;font-size:.85rem;margin-bottom:6px;">Diaristas aprovadas mais próximas:</p>
@@ -1171,8 +1172,10 @@ function renderSolicitacoes(lista){
         </div>` : ''}
         <div class="action-row">
           ${s.status !== 'atendida' ? `<button class="btn btn-success btn-sm" onclick="marcarAtendida('${s.id}')">Marcar como atendida</button>` : ''}
+          ${s.diaristaId ? `<button class="btn btn-outline btn-sm" onclick="cobrarCliente('${s.id}')">💳 ${s.asaasPaymentId ? 'Gerar nova cobrança' : 'Cobrar cliente'}</button>` : ''}
           ${s.status === 'atendida' && s.diaristaId ? `<button class="btn btn-outline btn-sm" onclick="copiarLinkAvaliacao('${s.id}', ${s.comodos||0}, ${s.nivelSujeira||0})">🔗 Copiar link de avaliação para a diarista</button>` : ''}
         </div>
+        ${dvRenderCobrancaBox(s.id)}
       </div>
     </div>`;
 }).join('');
@@ -1197,6 +1200,77 @@ async function atribuirDiarista(solicitacaoId){
 function copiarLinkAvaliacao(solicitacaoId, comodos, sujeira){
   const url = `${window.location.origin}${window.location.pathname}?avaliar=diarista&sid=${solicitacaoId}&comodos=${comodos}&sujeira=${sujeira}`;
   dvCopiarTexto(url, 'Link copiado! Envie para a diarista pelo WhatsApp.');
+}
+
+function dvFormatAsaasStatus(status){
+  const mapa = {
+    PENDING: 'Aguardando pagamento',
+    RECEIVED: 'Pago (aguardando confirmação)',
+    CONFIRMED: 'Pago e confirmado',
+    RECEIVED_IN_CASH: 'Pago em dinheiro',
+    OVERDUE: 'Vencido',
+    REFUNDED: 'Estornado',
+    CANCELLED: 'Cancelado',
+  };
+  return mapa[status] || status || '-';
+}
+
+function dvRenderCobrancaBox(solicitacaoId){
+  const c = dvCobrancasCache[solicitacaoId];
+  if(!c) return '';
+  if(c.pix && c.pix.encodedImage){
+    return `
+    <div class="geo-box" style="margin-top:10px;">
+      <b>Cobrança Pix gerada</b>
+      <div style="margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;">
+        <img src="data:image/png;base64,${c.pix.encodedImage}" alt="QR Code Pix" style="width:160px;height:160px;border-radius:8px;background:#fff;padding:6px;">
+        <div style="flex:1;min-width:200px;">
+          <p style="font-size:.82rem;color:var(--muted);margin:0 0 8px;">Envie a imagem do QR Code ou o código abaixo para o cliente pelo WhatsApp.</p>
+          <button type="button" class="btn btn-outline btn-sm" onclick="dvCopiarTexto(dvCobrancasCache['${solicitacaoId}'].pix.payload, 'Código Pix copiado! Envie para o cliente.')">📋 Copiar código Pix (copia e cola)</button>
+        </div>
+      </div>
+    </div>`;
+}
+  if(c.invoiceUrl){
+    return `
+    <div class="geo-box" style="margin-top:10px;">
+      <b>Cobrança gerada</b>
+      <p style="font-size:.82rem;color:var(--muted);margin:8px 0;">Envie o link de pagamento abaixo para o cliente pelo WhatsApp.</p>
+      <button type="button" class="btn btn-outline btn-sm" onclick="dvCopiarTexto('${c.invoiceUrl}', 'Link de pagamento copiado! Envie para o cliente.')">📋 Copiar link de pagamento</button>
+    </div>`;
+}
+  return '';
+}
+
+async function cobrarCliente(solicitacaoId){
+  const s = cacheSolicitacoes.find(x=>x.id===solicitacaoId);
+  if(!s) return;
+  if(!s.diaristaId){ alert('Confirme a diarista responsável antes de gerar a cobrança.'); return; }
+  if(!s.valorFinal || !s.formaPagamento){ alert('Essa solicitação não tem valor final calculado. Não é possível cobrar.'); return; }
+  if(!s.cpf){ alert('Essa solicitação não tem CPF do cliente cadastrado. Não é possível cobrar.'); return; }
+  try{
+    const resp = await fetch(ASAAS_BACKEND_URL + '/api/criar-cobranca', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        solicitacaoId,
+        diaristaId: s.diaristaId,
+        value: s.valorFinal,
+        billingType: s.formaPagamento === 'cartao' ? 'CREDIT_CARD' : 'PIX',
+        cpfCnpj: s.cpf,
+      })
+    });
+    const result = await resp.json();
+    if(!resp.ok){
+      alert('Não foi possível gerar a cobrança: ' + (result.error || 'erro desconhecido'));
+      return;
+    }
+    dvCobrancasCache[solicitacaoId] = result;
+    renderSolicitacoes(cacheSolicitacoes);
+    alert('Cobrança gerada com sucesso! Role até a solicitação para ver o QR Code / link de pagamento.');
+  }catch(e){
+    alert('Erro de conexão ao tentar gerar a cobrança. Tente novamente.');
+}
 }
 
 async function marcarAtendida(id){
