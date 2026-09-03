@@ -345,8 +345,6 @@
             </div>
 
             <div class="geo-box" id="s-valor-box" style="display:none;">
-              <b>💰 Valor estimado da diária</b>
-              <p style="margin:6px 0 0;font-size:.85rem;color:var(--muted);">Calculado automaticamente pelo tamanho do imóvel e nível de sujeira (R$45 por cômodo + R$15 por nível de sujeira).</p>
               <div class="geo-status ok" id="s-valor-estimado" style="font-size:1.15rem;font-weight:700;"></div>
             </div>
 
@@ -549,8 +547,9 @@ if(!comodos || comodos < 1 || !sujeira){
 box.style.display = 'none';
 return null;
 }
-const valor = (comodos * 45) + (sujeira * 15);
-out.textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
+const valorSujeira = {1:20, 2:25, 3:35}[sujeira] || 0;
+const valor = (comodos * 48) + valorSujeira;
+out.textContent = 'Valor estimado da diária: R$ ' + valor.toFixed(2).replace('.', ',');
 box.style.display = 'block';
 return valor;
 }
