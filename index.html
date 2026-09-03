@@ -1076,16 +1076,24 @@ return;
 }
 await db.collection('diaristas').doc(id).update({status});
 }
+function dvCopiarTexto(texto, mensagemSucesso){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(texto).then(()=>{
+      alert(mensagemSucesso);
+}).catch(()=>{
+      window.prompt('Copie manualmente:', texto);
+});
+} else {
+    window.prompt('Copie manualmente:', texto);
+}
+}
+
 function copiarParaAdvogado(id){
   const d = cacheDiaristas.find(x=>x.id===id);
   if(!d) return;
   const end = d.endereco || {};
   const texto = `Nome completo: ${d.nome||''}\nCPF: ${d.cpf||''}\nRG: ${d.rg||''}\nData de nascimento: ${d.dataNascimento||''}\nEndereço: ${end.rua||''}, ${end.bairro||''}, ${end.cidade||''} - ${end.uf||''}, CEP ${end.cep||''}\nTelefone: ${d.telefone||''}`;
-  navigator.clipboard.writeText(texto).then(()=>{
-    alert('Dados copiados! Cole na mensagem para o advogado.');
-}).catch(()=>{
-    prompt('Copie manualmente:', texto);
-});
+  dvCopiarTexto(texto, 'Dados copiados! Cole na mensagem para o advogado.');
 }
 
 function renderSolicitacoes(lista){
@@ -1188,11 +1196,7 @@ async function atribuirDiarista(solicitacaoId){
 
 function copiarLinkAvaliacao(solicitacaoId, comodos, sujeira){
   const url = `${window.location.origin}${window.location.pathname}?avaliar=diarista&sid=${solicitacaoId}&comodos=${comodos}&sujeira=${sujeira}`;
-  navigator.clipboard.writeText(url).then(()=>{
-    alert('Link copiado! Envie para a diarista pelo WhatsApp.');
-}).catch(()=>{
-    prompt('Copie manualmente:', url);
-});
+  dvCopiarTexto(url, 'Link copiado! Envie para a diarista pelo WhatsApp.');
 }
 
 async function marcarAtendida(id){
