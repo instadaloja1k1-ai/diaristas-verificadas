@@ -279,9 +279,13 @@
                 <input type="tel" id="s-telefone" placeholder="(00) 00000-0000" required>
               </div>
           <div class="field">
-                <label>E-mail <span class="hint">(vamos confirmar por aqui)</span></label>
+                <label>E-mail</label>
                 <input type="email" id="s-email" required>
               </div>
+            </div>
+        <div class="field">
+              <label>Confirmar e-mail <span class="hint">(digite novamente para conferir)</span></label>
+              <input type="email" id="s-email-confirmar" required>
             </div>
         <div class="field">
 <label>CPF</label>
@@ -754,6 +758,11 @@ async function submitSolicitacao(ev){
 }
 
   const email = document.getElementById('s-email').value.trim();
+  const emailConfirmar = document.getElementById('s-email-confirmar').value.trim();
+  if(email.toLowerCase() !== emailConfirmar.toLowerCase()){
+    alertBox.innerHTML = '<div class="alert alert-error">Os e-mails digitados não são iguais. Confira e tente novamente.</div>';
+    return false;
+}
   const dvCalculoAtual = dvCalcularValorSolicitacao();
   const dados = {
     nome: document.getElementById('s-nome').value.trim(),
@@ -776,29 +785,22 @@ async function submitSolicitacao(ev){
     valorEstimado: dvCalculoAtual ? dvCalculoAtual.valorBase : null,
     taxaGateway: dvCalculoAtual ? dvCalculoAtual.taxaGateway : null,
     valorFinal: dvCalculoAtual ? dvCalculoAtual.valorFinal : null,
-    status: 'aguardando_verificacao',
-    verified: false,
+    status: 'verificada',
+    verified: true,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
 };
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Enviando...';
   try{
-    const docRef = await db.collection('solicitacoes').add(dados);
-
-    const actionCodeSettings = {
-      url: window.location.origin + window.location.pathname + '?sid=' + docRef.id,
-      handleCodeInApp: true
-};
-    await verifyAuth.sendSignInLinkToEmail(email, actionCodeSettings);
-    window.localStorage.setItem('dv_email_verificacao', email);
+    await db.collection('solicitacoes').add(dados);
 
     document.getElementById('form-solicitar').reset();
     document.getElementById('s-valor-box').style.display = 'none';
     geoData.s = null;
     document.getElementById('s-geo-status').textContent = 'Localização ainda não definida.';
     document.getElementById('s-geo-status').className = 'geo-status';
-    alertBox.innerHTML = `<div class="alert alert-success">Solicitação recebida! Enviamos um link de confirmação para <b>${email}</b>. Clique no link do e-mail para validar sua solicitação — só depois disso ela é analisada pela nossa equipe.</div>`;
+    alertBox.innerHTML = '<div class="alert alert-success">Solicitação recebida! Nossa equipe já vai analisar e entrar em contato pelo telefone ou e-mail informado.</div>';
     window.scrollTo(0,0);
 }catch(e){
     alertBox.innerHTML = '<div class="alert alert-error">Erro ao enviar solicitação. Tente novamente em instantes.</div>';
