@@ -311,6 +311,11 @@
               </div>
             </div>
 
+            <div class="field">
+              <label>CEP</label>
+              <input type="text" id="s-cep" placeholder="00000-000">
+            </div>
+
             <div class="geo-box">
               <b>📍 Localização</b>
               <p style="margin:6px 0 0;font-size:.85rem;color:var(--muted);">Usada para buscar diaristas próximas de você.</p>
@@ -649,20 +654,27 @@ async function useGeolocation(prefix){
 
 async function geocodeFromFields(prefix){
   const statusEl = document.getElementById(prefix+'-geo-status');
-  const rua = document.getElementById(prefix+'-rua').value;
-  const bairro = document.getElementById(prefix+'-bairro').value;
-  const cidade = document.getElementById(prefix+'-cidade').value;
-  const uf = document.getElementById(prefix+'-uf').value;
-  if(!rua || !cidade || !uf){
+  const rua = document.getElementById(prefix+'-rua').value.trim();
+  const bairro = document.getElementById(prefix+'-bairro').value.trim();
+  const cidade = document.getElementById(prefix+'-cidade').value.trim();
+  const uf = document.getElementById(prefix+'-uf').value.trim();
+  if(!cidade || !uf){
     statusEl.className = 'geo-status err';
-    statusEl.textContent = 'Preencha rua, cidade e UF antes de buscar o endereço.';
+    statusEl.textContent = 'Preencha ao menos cidade e UF antes de buscar o endereço.';
     return;
 }
   statusEl.className = 'geo-status';
   statusEl.textContent = 'Buscando endereço...';
   try{
-    const query = `${rua}, ${bairro}, ${cidade}, ${uf}, Brasil`;
-    const loc = await geocodeAddress(query);
+    const tentativas = [];
+    if(rua) tentativas.push(`${rua}, ${bairro}, ${cidade}, ${uf}, Brasil`);
+    if(bairro) tentativas.push(`${bairro}, ${cidade}, ${uf}, Brasil`);
+    tentativas.push(`${cidade}, ${uf}, Brasil`);
+    let loc = null;
+    for(const query of tentativas){
+      loc = await geocodeAddress(query);
+      if(loc) break;
+}
     if(!loc){
       statusEl.className = 'geo-status err';
       statusEl.textContent = 'Endereço não encontrado. Tente usar "minha localização atual" ou revise o endereço.';
@@ -676,6 +688,49 @@ async function geocodeFromFields(prefix){
     statusEl.textContent = 'Erro ao buscar endereço. Tente novamente.';
 }
 }
+
+async function buscarPorCep(prefix){
+  const cepEl = document.getElementById(prefix+'-cep');
+  if(!cepEl) return;
+  const statusEl = document.getElementById(prefix+'-geo-status');
+  const cepDigits = (cepEl.value || '').replace(/\D/g, '');
+  if(cepDigits.length !== 8) return;
+  statusEl.className = 'geo-status';
+  statusEl.textContent = 'Buscando CEP...';
+  try{
+    const res = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+    const data = await res.json();
+    if(data.erro){
+      statusEl.className = 'geo-status err';
+      statusEl.textContent = 'CEP não encontrado. Revise o número ou preencha o endereço manualmente.';
+      return;
+}
+    const ruaEl = document.getElementById(prefix+'-rua');
+    const bairroEl = document.getElementById(prefix+'-bairro');
+    const cidadeEl = document.getElementById(prefix+'-cidade');
+    const ufEl = document.getElementById(prefix+'-uf');
+    if(ruaEl) ruaEl.value = data.logradouro || ruaEl.value;
+    if(bairroEl) bairroEl.value = data.bairro || bairroEl.value;
+    if(cidadeEl) cidadeEl.value = data.localidade || cidadeEl.value;
+    if(ufEl && data.uf) ufEl.value = data.uf;
+    await geocodeFromFields(prefix);
+}catch(e){
+    statusEl.className = 'geo-status err';
+    statusEl.textContent = 'Erro ao buscar CEP. Tente novamente.';
+}
+}
+
+function dvSetupCepAutobusca(prefix){
+  const cepEl = document.getElementById(prefix+'-cep');
+  if(!cepEl) return;
+  cepEl.addEventListener('blur', ()=>buscarPorCep(prefix));
+  cepEl.addEventListener('input', ()=>{
+    const digits = cepEl.value.replace(/\D/g, '');
+    if(digits.length === 8) buscarPorCep(prefix);
+});
+}
+dvSetupCepAutobusca('d');
+dvSetupCepAutobusca('s');
 
 function distKm(lat1, lon1, lat2, lon2){
   const R = 6371;
@@ -773,7 +828,8 @@ async function submitSolicitacao(ev){
       rua: document.getElementById('s-rua').value.trim(),
       bairro: document.getElementById('s-bairro').value.trim(),
       cidade: document.getElementById('s-cidade').value.trim(),
-      uf: document.getElementById('s-uf').value
+      uf: document.getElementById('s-uf').value,
+      cep: document.getElementById('s-cep').value.trim()
 },
     lat: geoData.s.lat,
     lng: geoData.s.lng,
@@ -1144,6 +1200,7 @@ function renderSolicitacoes(lista){
           <div><b>CPF</b>${escapeHtml(s.cpf||'-')}</div>
           <div><b>Endereço</b>${escapeHtml(end.rua||'-')}, ${escapeHtml(end.bairro||'')}</div>
           <div><b>Cidade/UF</b>${escapeHtml(end.cidade||'-')} / ${escapeHtml(end.uf||'-')}</div>
+          <div><b>CEP</b>${escapeHtml(end.cep||'-')}</div>
           <div><b>Cômodos</b>${s.comodos||'-'}</div>
           <div><b>Nível de sujeira</b>${s.nivelSujeira||'-'}</div>
           <div><b>Forma de pagamento</b>${s.formaPagamento==='cartao'?'Cartão de crédito':(s.formaPagamento==='pix'?'Pix':'-')}</div>
